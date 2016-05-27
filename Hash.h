@@ -7,6 +7,11 @@ using namespace std;
 template<class K, class V>
 struct HashTableNode
 {
+	HashTableNode(K key, V value)
+		:_key(key)
+		,_value(value)
+		,_next(NULL)
+	{}
 	K _key;
 	V _value;
 	HashTableNode<K, V> *_next;
@@ -62,6 +67,15 @@ inline size_t HashTableBucket<K, V>::_GetNextPrime(size_t size)
 }
 
 template<class K, class V>
+inline void HashTableBucket<K, V>::_CheckExpand()
+{
+	if (_size >= (0.9 * _tables.size()))
+	{
+		_tables.resize(_GetNextPrime(_tables.size()));
+	}
+}
+
+template<class K, class V>
 inline HashTableBucket<K, V>::HashTableBucket()
 	:_size(0)
 {
@@ -83,6 +97,27 @@ inline HashTableBucket<K, V>::HashTableBucket(const HashTableBucket<K, V>& t)
 		}
 	}
 }
+
+
+template<class K, class V>
+inline bool HashTableBucket<K, V>::Insert(const K & key, const V & value)
+{
+	_CheckExpand();
+	int index = key % _tables.size();
+	Node *NewNode = new Node(key, value);
+	if (_tables[index] == NULL)
+	{
+		_tables[index] = NewNode;
+	}
+	else
+	{
+		NewNode->_next = _tables[index];
+		_tables[index] = NewNode;
+	}
+	++_size;
+	return true;
+}
+
 
 template<class K, class V>
 inline HashTableBucket<K, V>& HashTableBucket<K, V>::operator=(HashTableBucket<K, V> t)
