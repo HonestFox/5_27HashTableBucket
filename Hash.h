@@ -4,6 +4,46 @@
 #include <vector>
 using namespace std;
 
+struct __HashFuncString
+{
+	size_t operator()(const string &key)
+	{
+		size_t hash = 0;
+		for (size_t i = 0; i < key.size(); ++i)
+		{
+			hash += key[i];
+		}
+		return hash;
+	}
+};
+
+struct __HashFuncInt
+{
+	size_t operator()(const int &key)
+	{
+		return key;
+	}
+};
+
+
+//利用函数的重载，可以实现对int string类型 用不同的hash算法！！
+template <class K>
+struct __DefaultHashFunc
+{
+	size_t operator()(const string &key)
+	{
+		return HashFuncString(key);
+	}
+
+	size_t operator()(const int &key)
+	{
+		return HashFuncInt(key);
+	}
+
+	__HashFuncString HashFuncString;
+	__HashFuncInt HashFuncInt;
+};
+
 template<class K, class V>
 struct HashTableNode
 {
@@ -17,33 +57,38 @@ struct HashTableNode
 	HashTableNode<K, V> *_next;
 };
 
-template<class K, class V >
+template<class K, class V, class HashFunc = __DefaultHashFunc<K> >
 class HashTableBucket
 {
 	typedef HashTableNode<K, V> Node;
 public:
 	HashTableBucket();
 
-	HashTableBucket(const HashTableBucket<K, V> &t);
-	HashTableBucket<K, V>& operator=(HashTableBucket<K, V> t);
+	HashTableBucket(const HashTableBucket<K, V, HashFunc> &t);
+	HashTableBucket<K, V, HashFunc>& operator=(HashTableBucket<K, V, HashFunc> t);
 	~HashTableBucket();
 	bool Insert(const K& key, const V& value);
-	Node *Find(const K& key);
+	HashTableNode<K, V> *Find(const K& key);
 	bool Remove(const K& key);
-	void PrintTables();
 
+
+	friend ostream& operator<< (ostream &os, HashTableBucket<K, V, HashFunc> &t)
+	{
+		t.PrintTables();
+		return os;
+	}
 protected:
-	size_t _HashFunc(const K &key);
 	size_t _GetNextPrime(size_t size);
 	void _CheckExpand();
+	void PrintTables();
 
 protected:
 	vector<Node*> _tables;
 	size_t _size;
 };
 
-template<class K, class V>
-inline size_t HashTableBucket<K, V>::_GetNextPrime(size_t size)
+template<class K, class V, class HashFunc>
+inline size_t HashTableBucket<K, V, HashFunc>::_GetNextPrime(size_t size)
 {
 	// 使用素数表对齐做哈希表的容量，降低哈希冲突
 	const int _PrimeSize = 28;
@@ -66,8 +111,8 @@ inline size_t HashTableBucket<K, V>::_GetNextPrime(size_t size)
 	return size;
 }
 
-template<class K, class V>
-inline void HashTableBucket<K, V>::_CheckExpand()
+template<class K, class V, class HashFunc>
+inline void HashTableBucket<K, V, HashFunc>::_CheckExpand()
 {
 	if (_size >= (0.9 * _tables.size()))
 	{
@@ -75,15 +120,15 @@ inline void HashTableBucket<K, V>::_CheckExpand()
 	}
 }
 
-template<class K, class V>
-inline HashTableBucket<K, V>::HashTableBucket()
+template<class K, class V, class HashFunc>
+inline HashTableBucket<K, V, HashFunc>::HashTableBucket()
 	:_size(0)
 {
 	_tables.resize(_GetNextPrime(_tables.size()));
 }
 
-template<class K, class V>
-inline HashTableBucket<K, V>::HashTableBucket(const HashTableBucket<K, V>& t)
+template<class K, class V, class HashFunc>
+inline HashTableBucket<K, V, HashFunc>::HashTableBucket(const HashTableBucket<K, V, HashFunc>& t)
 	:_size(0)
 {
 	_tables.resize(t.size());
@@ -99,11 +144,11 @@ inline HashTableBucket<K, V>::HashTableBucket(const HashTableBucket<K, V>& t)
 }
 
 
-template<class K, class V>
-inline bool HashTableBucket<K, V>::Insert(const K & key, const V & value)
+template<class K, class V, class HashFunc>
+inline bool HashTableBucket<K, V, HashFunc>::Insert(const K & key, const V & value)
 {
 	_CheckExpand();
-	int index = key % _tables.size();
+	int index = HashFunc()(key) % _tables.size();
 	Node *NewNode = new Node(key, value);
 	if (_tables[index] == NULL)
 	{
@@ -118,16 +163,78 @@ inline bool HashTableBucket<K, V>::Insert(const K & key, const V & value)
 	return true;
 }
 
+template<class K, class V, class HashFunc>
+inline HashTableNode<K, V>* HashTableBucket<K, V, HashFunc>::Find(const K & key)
+{
+	int index = HashFunc()(key) % _tables.size();
+	Node *cur = _tables[index];
+	while (cur)
+	{
+		if (cur->_key == key)
+		{
+			return cur;
+		}
+		cur = cur->_next;
+	}
+}
 
-template<class K, class V>
-inline HashTableBucket<K, V>& HashTableBucket<K, V>::operator=(HashTableBucket<K, V> t)
+template<class K, class V, class HashFunc>
+inline bool HashTableBucket<K, V, HashFunc>::Remove(const K & key)
+{
+	int index = HashFunc()(key) % _tables.size();
+	Node *cur = _tables[index];
+	if (cur == NULL)
+	{
+		return false;
+	}
+	if (cur->_key == key)
+	{
+		_tables[index] = cur->_next;
+		delete cur;
+		cur = NULL;
+	}
+	while (cur && cur->_next)
+	{
+		if (cur->_next->_key == key)
+		{
+			Node *del = cur->_next;
+			cur->_next = del->_next;
+			delete del;
+			del = NULL;
+			_size--;
+			return true;
+		}
+		cur = cur->_next;
+	}
+	return false;
+}
+
+template<class K, class V, class HashFunc>
+inline void HashTableBucket<K, V, HashFunc>::PrintTables()
+{
+	for (size_t i = 0; i < _tables.size(); ++i)
+	{
+		Node *cur = _tables[i];
+		cout << "第" << i << "行： ";
+		while (cur)
+		{
+			cout << cur->_key << " :" << cur->_value << " -->";
+			cur = cur->_next;
+		}
+		cout << "NULL" << endl;
+	}
+}
+
+
+template<class K, class V, class HashFunc>
+inline HashTableBucket<K, V, HashFunc>& HashTableBucket<K, V, HashFunc>::operator=(HashTableBucket<K, V, HashFunc> t)
 {
 	_tables.swap(t);
 	swap(_size, t._size);
 }
 
-template<class K, class V>
-inline HashTableBucket<K, V>::~HashTableBucket()
+template<class K, class V, class HashFunc>
+inline HashTableBucket<K, V, HashFunc>::~HashTableBucket()
 {
 	for (size_t i = 0; i < _tables.size(); ++i)
 	{
